@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Human Verification</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  .captcha-box {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 26px 30px;
+    width: 380px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    position: relative;
+  }
+
+  .captcha-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .captcha-header .icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    background: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .captcha-header h2 { font-size: 14px; margin: 0; color: #222; }
+  .captcha-header p { margin: 2px 0 0; font-size: 10px; color: #888; }
+
+  .progress-track { font-size: 10px; color: #aaa; margin-bottom: 4px; }
+
+  .progress-bar { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: #6a5acd; transition: width 0.3s ease; }
+
+  .step { display: none; min-height: 210px; }
+  .step.active { display: block; animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%,60% { transform: translateX(-6px); }
+    40%,80% { transform: translateX(6px); }
+  }
+  .shake { animation: shake 0.4s; }
+
+  .question { font-size: 13px; color: #333; margin-bottom: 12px; line-height: 1.5; }
+  .question b { color: #6a5acd; }
+
+  .option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
+    margin-bottom: 8px; cursor: pointer; font-size: 13px; color: #333;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .option:hover { background: #f7f7ff; border-color: #6a5acd; }
+  .option.selected { background: #efeaff; border-color: #6a5acd; }
+
+  .grid-select { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .grid-cell {
+    aspect-ratio: 1; border: 1px solid #ddd; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; cursor: pointer; background: #fafafa;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .grid-cell:hover { border-color: #6a5acd; }
+  .grid-cell.picked { background: #efeaff; border-color: #6a5acd; }
+
+  .nav-btn {
+    width: 100%; margin-top: 8px; padding: 11px; background: #6a5acd;
+    color: white; border: none; border-radius: 8px; font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: background 0.15s;
+  }
+  .nav-btn:hover { background: #5a4ac0; }
+  .nav-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+  .hint { font-size: 10.5px; color: #999; margin: 4px 0 10px; min-height: 14px; }
+
+  input[type="text"] {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 13px; margin-bottom: 6px;
+  }
+
+  .distorted {
+    font-size: 26px; font-weight: 700; letter-spacing: 4px;
+    text-align: center; padding: 14px 0; user-select: none;
+    background: repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 4px, #e8e8e8 4px, #e8e8e8 8px);
+    border-radius: 8px; margin-bottom: 12px; color: #333;
+  }
+  .distorted span { display: inline-block; }
+
+  .hold-btn {
+    width: 100%; padding: 20px; background: #eee; border: 2px dashed #bbb;
+    border-radius: 10px; text-align: center; font-size: 13px; color: #555;
+    cursor: pointer; user-select: none; position: relative; overflow: hidden;
+  }
+  .hold-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: #b7aaf0; z-index: 0; transition: width 0.05s linear;
+  }
+  .hold-btn span { position: relative; z-index: 1; }
+
+  .dodge-wrap { position: relative; height: 130px; }
+  .dodge-btn {
+    position: absolute; padding: 11px 16px; background: #6a5acd; color: #fff;
+    border: none; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+
+  .traffic-btn {
+    width: 100%; padding: 14px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; color: #fff; cursor: pointer;
+    background: #999; transition: background 0.15s;
+  }
+  .traffic-btn.go { background: #4caf50; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 12px; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+  .fake-checkbox {
+    width: 26px; height: 26px; border: 2px solid #bbb; border-radius: 4px;
+    flex-shrink: 0; position: relative; cursor: pointer;
+  }
+  .fake-checkbox.checked::after { content: "✓"; position: absolute; inset: 0; display:flex; align-items:center; justify-content:center; color: #4caf50; font-weight: 700; }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #6a5acd;
+    border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result { text-align: center; }
+  .result .big-icon { font-size: 42px; margin-bottom: 8px; }
+  .result h3 { margin: 0 0 6px; color: #222; font-size: 16px; }
+  .result p { color: #666; font-size: 12.5px; line-height: 1.5; margin: 0; }
+
+  .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #aaa; }
+</style>
+</head>
+<body>
+
+<div class="captcha-box">
+  <div class="captcha-header">
+    <div class="icon">🤖</div>
+    <div>
+      <h2>Human Verification</h2>
+      <p>Unusual activity detected. Complete all checks.</p>
+    </div>
+  </div>
+
+  <div class="progress-track" id="progressTrack">Step 1 of 10</div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- Step 1: distorted text -->
+  <div class="step active" data-step="0">
+    <div class="question">Type the characters exactly as shown:</div>
+    <div class="distorted" id="distortedText"></div>
+    <input type="text" id="s1input" placeholder="Enter the text above" autocomplete="off">
+    <div class="hint" id="s1hint">Case doesn't matter. Squinting encouraged.</div>
+    <button class="nav-btn" id="s1btn">Verify</button>
+  </div>
+
+  <!-- Step 2: select all, images regenerate once -->
+  <div class="step" data-step="1">
+    <div class="question">Select all squares showing a <b>real relationship</b> (not one Ezra is just pretending to be in):</div>
+    <div class="grid-select" id="grid2"></div>
+    <div class="hint" id="s2hint">Click all that apply, then continue.</div>
+    <button class="nav-btn" id="s2btn">Continue</button>
+  </div>
+
+  <!-- Step 3: slider -->
+  <div class="step" data-step="2">
+    <div class="question">Drag the slider all the way to confirm you're not a bot pretending to have a heartbeat:</div>
+    <input type="range" min="0" max="100" value="0" id="slider3" style="width:100%; margin: 14px 0;">
+    <div class="hint" id="s3hint">Slide to 100%.</div>
+    <button class="nav-btn" id="s3btn" disabled>Continue</button>
+  </div>
+
+  <!-- Step 4: hold button -->
+  <div class="step" data-step="3">
+    <div class="question">Press and hold the button for <b>5 full seconds</b> without letting go:</div>
+    <div class="hold-btn" id="holdBtn"><div class="hold-fill" id="holdFill"></div><span id="holdLabel">Press and hold</span></div>
+    <div class="hint" id="s4hint">Letting go early resets the timer.</div>
+  </div>
+
+  <!-- Step 5: dodging button -->
+  <div class="step" data-step="4">
+    <div class="question">Click the button to confirm. It may be a little shy:</div>
+    <div class="dodge-wrap" id="dodgeWrap">
+      <button class="dodge-btn" id="dodgeBtn" style="left:110px; top:50px;">Click me</button>
+    </div>
+    <div class="hint" id="s5hint">It'll settle down eventually. Probably.</div>
+  </div>
+
+  <!-- Step 6: math -->
+  <div class="step" data-step="5">
+    <div class="question" id="mathQuestion">Solve to continue:</div>
+    <input type="text" id="s6input" placeholder="Your answer" autocomplete="off">
+    <div class="hint" id="s6hint">Whole numbers only.</div>
+    <button class="nav-btn" id="s6btn">Verify</button>
+  </div>
+
+  <!-- Step 7: reversed text -->
+  <div class="step" data-step="6">
+    <div class="question">Type this word <b>backwards</b>:</div>
+    <div class="distorted" id="reverseWord"></div>
+    <input type="text" id="s7input" placeholder="Reversed text" autocomplete="off">
+    <div class="hint" id="s7hint"></div>
+    <button class="nav-btn" id="s7btn">Verify</button>
+  </div>
+
+  <!-- Step 8: second grid, trickier -->
+  <div class="step" data-step="7">
+    <div class="question">Select all squares where <b>Ezra actually texts back</b>:</div>
+    <div class="grid-select" id="grid8"></div>
+    <div class="hint" id="s8hint">Select all that apply, then continue.</div>
+    <button class="nav-btn" id="s8btn">Continue</button>
+  </div>
+
+  <!-- Step 9: reaction timer -->
+  <div class="step" data-step="8">
+    <div class="question">Wait for the button to turn green, then click it <b>immediately</b>:</div>
+    <button class="traffic-btn" id="trafficBtn">Wait for it...</button>
+    <div class="hint" id="s9hint">Clicking too early restarts the wait.</div>
+  </div>
+
+  <!-- Step 10: checkbox with extra challenge -->
+  <div class="step" data-step="9">
+    <div class="question">Final step:</div>
+    <div class="checkbox-row" id="finalCheckboxRow">
+      <div class="fake-checkbox" id="finalCheckbox"></div>
+      <div style="font-size:13px; color:#333; flex:1;">I'm not a robot</div>
+      <div class="spinner" id="finalSpinner"></div>
+    </div>
+    <div class="hint" id="s10hint">One click. Should be easy by now.</div>
+  </div>
+
+  <!-- Result -->
+  <div class="step" data-step="10">
+    <div class="result">
+      <div class="big-icon">✅</div>
+      <h3>Verified: 100% Human</h3>
+      <p>Congratulations, you passed all 10 checks. Ezra's situationship, however, remains permanently unverified.</p>
+    </div>
+  </div>
+
+  <div class="footer">Protected by TotallyRealCaptcha™</div>
+</div>
+
+<script>
+  const TOTAL_STEPS = 10;
+  let current = 0;
+  const progressFill = document.getElementById('progressFill');
+  const progressTrack = document.getElementById('progressTrack');
+  const stepsEls = document.querySelectorAll('.step');
+
+  function showStep(i) {
+    stepsEls.forEach(el => el.classList.toggle('active', parseInt(el.dataset.step) === i));
+    progressFill.style.width = (Math.min(i, TOTAL_STEPS) / TOTAL_STEPS) * 100 + '%';
+    progressTrack.textContent = i < TOTAL_STEPS ? `Step ${i + 1} of ${TOTAL_STEPS}` : 'Complete';
+  }
+  function goNext() { current++; showStep(current); }
+  function shakeEl(el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+
+  // ---------- Step 1: distorted text ----------
+  const WORD1 = "N0TAB0T";
+  (function initStep1() {
+    const container = document.getElementById('distortedText');
+    WORD1.split('').forEach(ch => {
+      const span = document.createElement('span');
+      span.textContent = ch;
+      const rot = (Math.random() * 30 - 15).toFixed(1);
+      const dy = (Math.random() * 10 - 5).toFixed(1);
+      span.style.transform = `rotate(${rot}deg) translateY(${dy}px)`;
+      container.appendChild(span);
+    });
+    document.getElementById('s1btn').addEventListener('click', () => {
+      const val = document.getElementById('s1input').value.trim().toUpperCase();
+      if (val === WORD1) {
+        goNext();
+      } else {
+        shakeEl(document.querySelector('[data-step="0"]'));
+        document.getElementById('s1hint').textContent = "Nope, try again. Look closer.";
+      }
+    });
+  })();
+
+  // ---------- Step 2: grid, regenerates once ----------
+  (function initStep2() {
+    const options = ["💐","🎭","💞","🤖💔","📠","🕹️","💌","🎪"];
+    const grid = document.getElementById('grid2');
+    let regenerated = false;
+    function render() {
+      grid.innerHTML = '';
+      options.sort(() => Math.random() - 0.5).slice(0, 6).forEach(sym => {
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.textContent = sym;
+        cell.dataset.answer = (sym === "💞") ? "yes" : "no";
+        cell.addEventListener('click', () => cell.classList.toggle('picked'));
+        grid.appendChild(cell);
+      });
+    }
+    render();
+    document.getElementById('s2btn').addEventListener('click', () => {
+      if (!regenerated) {
+        regenerated = true;
+        document.getElementById('s2hint').textContent = "New images appeared. Please select again.";
+        render();
+        return;
+      }
+      goNext();
+    });
+  })();
+
+  // ---------- Step 3: slider ----------
+  (function initStep3() {
+    const slider = document.getElementById('slider3');
+    const btn = document.getElementById('s3btn');
+    slider.addEventListener('input', () => {
+      btn.disabled = parseInt(slider.value) < 100;
+      document.getElementById('s3hint').textContent = slider.value + '%';
+    });
+    btn.addEventListener('click', goNext);
+  })();
+
+  // ---------- Step 4: hold button ----------
+  (function initStep4() {
+    const btn = document.getElementById('holdBtn');
+    const fill = document.getElementById('holdFill');
+    const label = document.getElementById('holdLabel');
+    let interval = null, progress = 0;
+    function reset() {
+      clearInterval(interval);
+      progress = 0;
+      fill.style.width = '0%';
+      label.textContent = 'Press and hold';
+    }
+    function start() {
+      interval = setInterval(() => {
+        progress += 100 / 50; // 5s at 100ms ticks
+        fill.style.width = Math.min(progress, 100) + '%';
+        label.textContent = 'Holding...';
+        if (progress >= 100) {
+          clearInterval(interval);
+          label.textContent = 'Verified!';
+          setTimeout(goNext, 300);
+        }
+      }, 100);
+    }
+    btn.addEventListener('mousedown', start);
+    btn.addEventListener('touchstart', start);
+    ['mouseup','mouseleave','touchend'].forEach(evt => btn.addEventListener(evt, () => {
+      if (progress < 100) reset();
+    }));
+  })();
+
+  // ---------- Step 5: dodging button ----------
+  (function initStep5() {
+    const wrap = document.getElementById('dodgeWrap');
+    const btn = document.getElementById('dodgeBtn');
+    let dodges = 0;
+    const maxDodges = 4;
+    btn.addEventListener('mouseenter', () => {
+      if (dodges >= maxDodges) return;
+      dodges++;
+      const maxX = wrap.clientWidth - btn.offsetWidth;
+      const maxY = wrap.clientHeight - btn.offsetHeight;
+      const x = Math.max(0, Math.random() * maxX);
+      const y = Math.max(0, Math.random() * maxY);
+      btn.style.left = x + 'px';
+      btn.style.top = y + 'px';
+      document.getElementById('s5hint').textContent = `Nice try (${dodges}/${maxDodges} dodges).`;
+    });
+    btn.addEventListener('click', () => {
+      if (dodges >= maxDodges) goNext();
+    });
+  })();
+
+  // ---------- Step 6: math ----------
+  let mathAnswer = 0;
+  (function initStep6() {
+    const a = Math.floor(Math.random() * 8) + 2;
+    const b = Math.floor(Math.random() * 8) + 2;
+    mathAnswer = a + b;
+    document.getElementById('mathQuestion').innerHTML = `Solve to continue: <b>${a} + ${b} = ?</b>`;
+    document.getElementById('s6btn').addEventListener('click', () => {
+      const val = parseInt(document.getElementById('s6input').value.trim());
+      if (val === mathAnswer) {
+        goNext();
+      } else {
+        shakeEl(document.querySelector('[data-step="5"]'));
+        document.getElementById('s6hint').textContent = "Incorrect. Try again.";
+      }
+    });
+  })();
+
+  // ---------- Step 7: reversed word ----------
+  const WORD7 = "IMAGINARY";
+  (function initStep7() {
+    document.getElementById('reverseWord').textContent = WORD7;
+    document.getElementById('s7btn').addEventListener('click', () => {
+      const val = document.getElementById('s7input').value.trim().toUpperCase();
+      const expected = WORD7.split('').reverse().join('');
+      if (val === expected) {
+        goNext();
+      } else {
+        shakeEl(document.querySelector('[data-step="6"]'));
+        document.getElementById('s7hint').textContent = "Not quite. Read it right to left.";
+      }
+    });
+  })();
+
+  // ---------- Step 8: second grid ----------
+  (function initStep8() {
+    const options = ["📵","💬","👻","🔕","💤","📭","✅💬","🚫"];
+    const grid = document.getElementById('grid8');
+    let regenerated = false;
+    function render() {
+      grid.innerHTML = '';
+      options.sort(() => Math.random() - 0.5).slice(0, 6).forEach(sym => {
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.textContent = sym;
+        cell.dataset.answer = (sym === "✅💬") ? "yes" : "no";
+        cell.addEventListener('click', () => cell.classList.toggle('picked'));
+        grid.appendChild(cell);
+      });
+    }
+    render();
+    document.getElementById('s8btn').addEventListener('click', () => {
+      if (!regenerated) {
+        regenerated = true;
+        document.getElementById('s8hint').textContent = "Results unclear. New images loaded, try again.";
+        render();
+        return;
+      }
+      goNext();
+    });
+  })();
+
+  // ---------- Step 9: reaction timer ----------
+  (function initStep9() {
+    const btn = document.getElementById('trafficBtn');
+    let ready = false;
+    let timeoutId = null;
+    function startWait() {
+      ready = false;
+      btn.classList.remove('go');
+      btn.textContent = 'Wait for it...';
+      const delay = 1200 + Math.random() * 2000;
+      timeoutId = setTimeout(() => {
+        ready = true;
+        btn.classList.add('go');
+        btn.textContent = 'Click now!';
+      }, delay);
+    }
+    btn.addEventListener('click', () => {
+      if (ready) {
+        clearTimeout(timeoutId);
+        goNext();
+      } else {
+        clearTimeout(timeoutId);
+        document.getElementById('s9hint').textContent = "Too soon. Restarting...";
+        startWait();
+      }
+    });
+    startWait();
+  })();
+
+  // ---------- Step 10: checkbox with a twist ----------
+  (function initStep10() {
+    const box = document.getElementById('finalCheckbox');
+    const spinner = document.getElementById('finalSpinner');
+    const hint = document.getElementById('s10hint');
+    let extraChallengeDone = false;
+    box.addEventListener('click', () => {
+      if (box.classList.contains('checked')) return;
+      spinner.style.display = 'inline-block';
+      hint.textContent = 'Analyzing behavior patterns...';
+      setTimeout(() => {
+        spinner.style.display = 'none';
+        if (!extraChallengeDone) {
+          extraChallengeDone = true;
+          hint.textContent = 'Additional verification required. Click again.';
+        } else {
+          box.classList.add('checked');
+          hint.textContent = 'Verified!';
+          setTimeout(goNext, 500);
+        }
+      }, 1400);
+    });
+  })();
+
+  showStep(0);
+</script>
+
+</body>
+</html>
